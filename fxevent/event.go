@@ -22,6 +22,7 @@ package fxevent
 
 import (
 	"os"
+	"time"
 )
 
 // Event defines an event emitted by fx.
@@ -30,28 +31,39 @@ type Event interface {
 }
 
 // Passing events by type to make Event hashable in the future.
-func (*LifecycleHookStart) event() {}
-func (*LifecycleHookStop) event()  {}
-func (*ProvideError) event()       {}
-func (*Supply) event()             {}
-func (*Provide) event()            {}
-func (*Invoke) event()             {}
-func (*InvokeError) event()        {}
-func (*StartError) event()         {}
-func (*StopSignal) event()         {}
-func (*StopError) event()          {}
-func (*Rollback) event()           {}
-func (*RollbackError) event()      {}
-func (*Running) event()            {}
+func (*LifecycleHookExecuting) event() {}
+func (*LifecycleHookExecuted) event()  {}
+func (*ProvideError) event()           {}
+func (*Supply) event()                 {}
+func (*Provide) event()                {}
+func (*Invoke) event()                 {}
+func (*InvokeError) event()            {}
+func (*StartError) event()             {}
+func (*StopSignal) event()             {}
+func (*StopError) event()              {}
+func (*Rollback) event()               {}
+func (*RollbackError) event()          {}
+func (*Running) event()                {}
+func (*CustomLoggerError) event()      {}
+func (*CustomLogger) event()           {}
 
-// LifecycleHookStart is emitted whenever an OnStart hook is executed
-type LifecycleHookStart struct {
+// LifecycleHookExecuting is emitted before an OnStart hook is about to be executed.
+type LifecycleHookExecuting struct {
+	// FunctionName is the name of the hook being executed.
+	FunctionName string
+	// CallerName is the name of the caller that appended the hook.
 	CallerName string
+	// Method is the lifecycle hook method getting called.
+	Method string
 }
 
-// LifecycleHookStop is emitted whenever an OnStart hook is executed
-type LifecycleHookStop struct {
-	CallerName string
+// LifecycleHookExecuted is emitted after an OnStart hook has been executed.
+type LifecycleHookExecuted struct {
+	FunctionName string
+	CallerName   string
+	Method       string
+	Runtime      time.Duration
+	Err          error
 }
 
 // ProvideError is emitted whenever there is an error applying options.
@@ -105,3 +117,11 @@ type RollbackError struct{ Err error }
 
 // Running is emitted whenever an application is started successfully.
 type Running struct{}
+
+// CustomLoggerError is emitted whenever a custom logger fails to construct.
+type CustomLoggerError struct{ Err error }
+
+// CustomLogger is emitted whenever a custom logger is set.
+type CustomLogger struct {
+	Function interface{}
+}

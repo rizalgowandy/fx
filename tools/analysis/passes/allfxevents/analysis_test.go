@@ -18,11 +18,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package fx
+package allfxevents
 
-import "go.uber.org/fx/fxevent"
+import (
+	"testing"
 
-// WithLogger exposes logger option for tests.
-func WithLogger(l fxevent.Logger) Option {
-	return withLogger(l)
+	"golang.org/x/tools/go/analysis/analysistest"
+)
+
+func TestAnalyzer(t *testing.T) {
+	analysistest.Run(t, analysistest.TestData(), Analyzer, "./...")
 }

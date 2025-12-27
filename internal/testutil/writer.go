@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2020-2021 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,11 +20,13 @@
 
 package testutil
 
-import "go.uber.org/zap/zapcore"
+import (
+	"go.uber.org/zap/zapcore"
+)
 
 // TestingT is a subset of the testing.T interface.
 type TestingT interface {
-	Logf(string, ...interface{})
+	Logf(string, ...any)
 }
 
 // WriteSyncer is a zapcore.WriteSyncer that writes to the provided test

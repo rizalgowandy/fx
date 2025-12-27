@@ -28,20 +28,27 @@ import (
 
 // TestForCoverage adds coverage for own sake.
 func TestForCoverage(t *testing.T) {
+	t.Parallel()
+
 	events := []Event{
-		&LifecycleHookStart{},
-		&LifecycleHookStop{},
-		&ProvideError{},
-		&Supply{},
-		&Provide{},
-		&Invoke{},
-		&InvokeError{},
-		&StartError{},
-		&StopSignal{},
-		&StopError{},
-		&Rollback{},
-		&RollbackError{},
-		&Running{},
+		&OnStartExecuting{},
+		&OnStartExecuted{},
+		&OnStopExecuting{},
+		&OnStopExecuted{},
+		&Supplied{},
+		&Provided{},
+		&Replaced{},
+		&Decorated{},
+		&BeforeRun{},
+		&Run{},
+		&Invoking{},
+		&Invoked{},
+		&Stopping{},
+		&Stopped{},
+		&RollingBack{},
+		&RolledBack{},
+		&Started{},
+		&LoggerInitialized{},
 	}
 
 	for _, e := range events {

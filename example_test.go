@@ -23,11 +23,13 @@ package fx_test
 import (
 	"context"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"time"
 
 	"go.uber.org/fx"
+	"go.uber.org/fx/fxevent"
 )
 
 // NewLogger constructs a logger. It's just a regular Go function, without any
@@ -72,7 +74,7 @@ func NewLogger() *log.Logger {
 // Functions may also return multiple objects. For example, we could combine
 // NewHandler and NewLogger into a single function:
 //
-//   func NewHandlerAndLogger() (*log.Logger, http.Handler, error)
+//	func NewHandlerAndLogger() (*log.Logger, http.Handler, error)
 //
 // Fx also understands this idiom, and would treat NewHandlerAndLogger as the
 // constructor for both the *log.Logger and http.Handler types. Just like
@@ -93,13 +95,13 @@ func NewHandler(logger *log.Logger) (http.Handler, error) {
 // the application's start and stop phases. In a non-Fx application, the main
 // function often includes blocks like this:
 //
-//   srv, err := NewServer() // some long-running network server
-//   if err != nil {
-//     log.Fatalf("failed to construct server: %v", err)
-//   }
-//   // Construct other objects as necessary.
-//   go srv.Start()
-//   defer srv.Stop()
+//	srv, err := NewServer() // some long-running network server
+//	if err != nil {
+//	  log.Fatalf("failed to construct server: %v", err)
+//	}
+//	// Construct other objects as necessary.
+//	go srv.Start()
+//	defer srv.Stop()
 //
 // In this example, the programmer explicitly constructs a bunch of objects,
 // crashing the program if any of the constructors encounter unrecoverable
@@ -120,7 +122,7 @@ func NewMux(lc fx.Lifecycle, logger *log.Logger) *http.ServeMux {
 	// until all handlers are registered.
 	mux := http.NewServeMux()
 	server := &http.Server{
-		Addr:    ":8080",
+		Addr:    "127.0.0.1:8080",
 		Handler: mux,
 	}
 	// If NewMux is called, we know that another function is using the mux. In
@@ -144,9 +146,11 @@ func NewMux(lc fx.Lifecycle, logger *log.Logger) *http.ServeMux {
 		// passed via Go's usual context.Context.
 		OnStart: func(context.Context) error {
 			logger.Print("Starting HTTP server.")
-			// In production, we'd want to separate the Listen and Serve phases for
-			// better error-handling.
-			go server.ListenAndServe()
+			ln, err := net.Listen("tcp", server.Addr)
+			if err != nil {
+				return err
+			}
+			go server.Serve(ln)
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
@@ -195,6 +199,16 @@ func Example() {
 		// NewMux, we also register Lifecycle hooks to start and stop an HTTP
 		// server.
 		fx.Invoke(Register),
+
+		// This is optional. With this, you can control where Fx logs
+		// its events. In this case, we're using a NopLogger to keep
+		// our test silent. Normally, you'll want to use an
+		// fxevent.ZapLogger or an fxevent.ConsoleLogger.
+		fx.WithLogger(
+			func() fxevent.Logger {
+				return fxevent.NopLogger
+			},
+		),
 	)
 
 	// In a typical application, we could just use app.Run() here. Since we

@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2020-2021 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,32 +22,60 @@ package fxlog
 
 import (
 	"reflect"
+	"sync"
 
 	"go.uber.org/fx/fxevent"
 )
 
-// Spy is an Fx event logger that captures logged statements. It may be used in
-// tests of Fx logs.
+// Events is a list of events captured by fxlog.Spy.
+type Events []fxevent.Event
+
+// Len returns the number of events in this list.
+func (es Events) Len() int { return len(es) }
+
+// SelectByTypeName returns a new list with only events matching the specified
+// type.
+func (es Events) SelectByTypeName(name string) Events {
+	var out Events
+	for _, e := range es {
+		if reflect.TypeOf(e).Elem().Name() == name {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// Spy is an Fx event logger that captures emitted events and/or logged
+// statements. It may be used in tests of Fx logs.
 type Spy struct {
-	events []fxevent.Event
+	mu     sync.RWMutex
+	events Events
 }
 
 var _ fxevent.Logger = &Spy{}
 
 // LogEvent appends an Event.
 func (s *Spy) LogEvent(event fxevent.Event) {
+	s.mu.Lock()
 	s.events = append(s.events, event)
+	s.mu.Unlock()
 }
 
 // Events returns all captured events.
-func (s *Spy) Events() []fxevent.Event {
-	events := make([]fxevent.Event, len(s.events))
+func (s *Spy) Events() Events {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	events := make(Events, len(s.events))
 	copy(events, s.events)
 	return events
 }
 
 // EventTypes returns all captured event types.
 func (s *Spy) EventTypes() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	types := make([]string, len(s.events))
 	for i, e := range s.events {
 		types[i] = reflect.TypeOf(e).Elem().Name()
@@ -55,7 +83,9 @@ func (s *Spy) EventTypes() []string {
 	return types
 }
 
-// Reset clears all messages from the Spy.
+// Reset clears all messages and events from the Spy.
 func (s *Spy) Reset() {
+	s.mu.Lock()
 	s.events = s.events[:0]
+	s.mu.Unlock()
 }

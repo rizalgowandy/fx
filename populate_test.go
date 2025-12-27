@@ -22,7 +22,6 @@ package fx_test
 
 import (
 	"io"
-	"io/ioutil"
 	"strings"
 	"testing"
 
@@ -33,6 +32,8 @@ import (
 )
 
 func TestPopulate(t *testing.T) {
+	t.Parallel()
+
 	// We make sure t1 has a size so when we compare pointers, 2 different
 	// objects are not equal.
 	type t1 struct {
@@ -43,6 +44,8 @@ func TestPopulate(t *testing.T) {
 	_ = new(t1).buf // buf is unused
 
 	t.Run("populate nothing", func(t *testing.T) {
+		t.Parallel()
+
 		app := fxtest.New(t,
 			Provide(func() *t1 { panic("should not be called ") }),
 			Populate(),
@@ -51,6 +54,8 @@ func TestPopulate(t *testing.T) {
 	})
 
 	t.Run("populate single", func(t *testing.T) {
+		t.Parallel()
+
 		var v1 *t1
 		app := fxtest.New(t,
 			Provide(func() *t1 { return &t1{} }),
@@ -61,6 +66,8 @@ func TestPopulate(t *testing.T) {
 	})
 
 	t.Run("populate interface", func(t *testing.T) {
+		t.Parallel()
+
 		var reader io.Reader
 		app := fxtest.New(t,
 			Provide(func() io.Reader { return strings.NewReader("hello world") }),
@@ -68,12 +75,14 @@ func TestPopulate(t *testing.T) {
 		)
 		app.RequireStart().RequireStop()
 
-		bs, err := ioutil.ReadAll(reader)
+		bs, err := io.ReadAll(reader)
 		require.NoError(t, err, "Failed to use populated io.Reader")
 		assert.Equal(t, "hello world", string(bs), "Unexpected reader")
 	})
 
 	t.Run("populate multiple inline values", func(t *testing.T) {
+		t.Parallel()
+
 		var (
 			v1 *t1
 			v2 *t2
@@ -92,6 +101,8 @@ func TestPopulate(t *testing.T) {
 	})
 
 	t.Run("populate fx.In struct", func(t *testing.T) {
+		t.Parallel()
+
 		targets := struct {
 			In
 
@@ -112,6 +123,8 @@ func TestPopulate(t *testing.T) {
 	})
 
 	t.Run("populate named field", func(t *testing.T) {
+		t.Parallel()
+
 		type result struct {
 			Out
 
@@ -144,7 +157,76 @@ func TestPopulate(t *testing.T) {
 		assert.False(t, targets.V1 == targets.V2, "fields should be different")
 	})
 
+	t.Run("annotated populate", func(t *testing.T) {
+		t.Parallel()
+
+		type result struct {
+			Out
+
+			V1 *t1 `name:"n1"`
+			V2 *t1 `name:"n2"`
+		}
+		var v1, v2 *t1
+		app := fxtest.New(t,
+			Provide(func() result {
+				return result{
+					V1: &t1{},
+					V2: &t1{},
+				}
+			}),
+			Populate(
+				Annotate(
+					&v1,
+					ParamTags(`name:"n1"`),
+				),
+				Annotate(
+					&v2,
+					ParamTags(`name:"n2"`),
+				),
+			),
+		)
+		app.RequireStart().RequireStop()
+
+		require.NotNil(t, v1, "did not populate argument 1")
+		require.NotNil(t, v2, "did not populate argument 2")
+		// Cannot use assert.Equal here as we want to compare pointers.
+		assert.False(t, v1 == v2, "values should be different")
+	})
+
+	t.Run("annotated populate with annotated provide", func(t *testing.T) {
+		t.Parallel()
+		var v1, v2 *t1
+		app := fxtest.New(t,
+			Provide(
+				Annotate(
+					func() (*t1, *t1) {
+						return &t1{}, &t1{}
+					},
+					ResultTags(`name:"n1"`, `name:"n2"`),
+				),
+			),
+			Populate(
+				Annotate(
+					&v1,
+					ParamTags(`name:"n1"`),
+				),
+				Annotate(
+					&v2,
+					ParamTags(`name:"n2"`),
+				),
+			),
+		)
+		app.RequireStart().RequireStop()
+
+		require.NotNil(t, v1, "did not populate argument 1")
+		require.NotNil(t, v2, "did not populate argument 2")
+		// Cannot use assert.Equal here as we want to compare pointers.
+		assert.False(t, v1 == v2, "values should be different")
+	})
+
 	t.Run("populate group", func(t *testing.T) {
+		t.Parallel()
+
 		type result struct {
 			Out
 
@@ -179,6 +261,8 @@ func TestPopulate(t *testing.T) {
 }
 
 func TestPopulateErrors(t *testing.T) {
+	t.Parallel()
+
 	type t1 struct{}
 	type container struct {
 		In
@@ -242,5 +326,79 @@ func TestPopulateErrors(t *testing.T) {
 		)
 		require.Error(t, app.Err())
 		assert.Contains(t, app.Err().Error(), tt.wantErr)
+	}
+}
+
+func TestPopulateValidateApp(t *testing.T) {
+	t.Parallel()
+
+	type t1 struct{}
+	type container struct {
+		In
+
+		T1 t1
+	}
+	type containerNoIn struct {
+		T1 t1
+	}
+	fn := func() {}
+	var v *t1
+
+	tests := []struct {
+		msg     string
+		opts    []any
+		wantErr string
+	}{
+		{
+			msg:     "inline value",
+			opts:    []any{t1{}},
+			wantErr: "not a pointer",
+		},
+		{
+			msg:     "container value",
+			opts:    []any{container{}},
+			wantErr: "not a pointer",
+		},
+		{
+			msg:     "container pointer without fx.In",
+			opts:    []any{&containerNoIn{}},
+			wantErr: "missing type: fx_test.containerNoIn",
+		},
+		{
+			msg:     "function",
+			opts:    []any{fn},
+			wantErr: "not a pointer",
+		},
+		{
+			msg:     "function pointer",
+			opts:    []any{&fn},
+			wantErr: "missing type: func()",
+		},
+		{
+			msg:     "invalid last argument",
+			opts:    []any{&v, t1{}},
+			wantErr: "target 2 is not a pointer type",
+		},
+		{
+			msg:     "nil argument",
+			opts:    []any{&v, nil, &v},
+			wantErr: "target 2 is nil",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.msg, func(t *testing.T) {
+			t.Parallel()
+
+			testOpts := []Option{
+				NopLogger,
+				Provide(func() *t1 { return &t1{} }),
+				Populate(tt.opts...),
+			}
+
+			err := validateTestApp(t, testOpts...)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
 	}
 }

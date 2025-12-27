@@ -7,43 +7,74 @@ on:
   pull_request:
     branches: ['*']
 
+permissions:
+  contents: read
+
 jobs:
 
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    name: Build and test
+
     strategy:
       matrix:
-        go: ["1.15.x", "1.16.x"]
-        include:
-        - go: 1.16.x
-          latest: true
+        os: ["ubuntu-latest", "windows-latest"]
+        go: ["1.24.x", "1.25.x"]
 
     steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
     - name: Setup Go
-      uses: actions/setup-go@v2
+      uses: actions/setup-go@v5
       with:
         go-version: ${{ matrix.go }}
 
-    - name: Checkout code
-      uses: actions/checkout@v2
-      
-    - name: Load cached dependencies
-      uses: actions/cache@v1
-      with:
-        path: ~/go/pkg/mod
-        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-
-
     - name: Download Dependencies
       run: go mod download
-
-    - name: Lint
-      if: matrix.latest
-      run: make lint
 
     - name: Test
       run: make cover
 
     - name: Upload coverage to codecov.io
-      uses: codecov/codecov-action@v1
+      uses: codecov/codecov-action@v4
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  doctest:
+    runs-on: ubuntu-latest
+    name: Test documentation
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: 1.25.x
+
+    - name: Test
+      run: make cover COVER_MODULES=./docs
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: 1.25.x
+
+    - uses: golangci/golangci-lint-action@v8
+      name: Install golangci-lint
+      with:
+        version: latest
+        args: --help  # make lint will run the linter
+
+    - run: make lint
+      name: Lint

@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2020-2021 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -27,13 +27,13 @@ import (
 	"os"
 
 	"go.uber.org/fx"
+	"go.uber.org/fx/internal/fxclock"
 	"go.uber.org/fx/internal/fxlog"
 	"go.uber.org/fx/internal/lifecycle"
 	"go.uber.org/fx/internal/testutil"
-	"go.uber.org/zap/zapcore"
 )
 
-// If a testing.T is unspecified, degarde to printing to stderr to provide
+// If a testing.T is unspecified, degrade to printing to stderr to provide
 // meaningful messages.
 type panicT struct {
 	W io.Writer // stream to which we'll write messages
@@ -45,15 +45,15 @@ type panicT struct {
 
 var _ TB = &panicT{}
 
-func (t *panicT) format(s string, args ...interface{}) string {
+func (t *panicT) format(s string, args ...any) string {
 	return fmt.Sprintf(s, args...)
 }
 
-func (t *panicT) Logf(s string, args ...interface{}) {
+func (t *panicT) Logf(s string, args ...any) {
 	fmt.Fprintln(t.W, t.format(s, args...))
 }
 
-func (t *panicT) Errorf(s string, args ...interface{}) {
+func (t *panicT) Errorf(s string, args ...any) {
 	t.lastErr = t.format(s, args...)
 	fmt.Fprintln(t.W, t.lastErr)
 }
@@ -66,36 +66,91 @@ func (t *panicT) FailNow() {
 	panic("test lifecycle failed")
 }
 
+// LifecycleOption modifies the behavior of the [Lifecycle]
+// when passed to [NewLifecycle].
+type LifecycleOption interface {
+	apply(*Lifecycle)
+}
+
+// EnforceTimeout will cause the [Lifecycle]'s Start and Stop methods
+// to return an error as soon as context expires,
+// regardless of whether specific hooks respect the timeout.
+func EnforceTimeout(enforce bool) LifecycleOption {
+	return &enforceTimeout{
+		enforce: enforce,
+	}
+}
+
+type enforceTimeout struct {
+	enforce bool
+}
+
+func (e *enforceTimeout) apply(lc *Lifecycle) {
+	lc.enforceTimeout = e.enforce
+}
+
+var _ LifecycleOption = (*enforceTimeout)(nil)
+
 // Lifecycle is a testing spy for fx.Lifecycle. It exposes Start and Stop
 // methods (and some test-specific helpers) so that unit tests can exercise
 // hooks.
 type Lifecycle struct {
 	t  TB
 	lc *lifecycle.Lifecycle
+
+	enforceTimeout bool
 }
 
 var _ fx.Lifecycle = (*Lifecycle)(nil)
 
 // NewLifecycle creates a new test lifecycle.
-func NewLifecycle(t TB) *Lifecycle {
-	var ws zapcore.WriteSyncer
+func NewLifecycle(t TB, opts ...LifecycleOption) *Lifecycle {
+	var w io.Writer
 	if t != nil {
-		ws = testutil.WriteSyncer{T: t}
+		w = testutil.WriteSyncer{T: t}
 	} else {
-		// Retain the old behavior of printing to stderr if a testing.T
-		// is not provided.
-		ws = zapcore.AddSync(os.Stderr)
+		w = os.Stderr
 		t = &panicT{W: os.Stderr}
 	}
-	return &Lifecycle{
-		lc: lifecycle.New(fxlog.DefaultLogger(ws)),
+	lc := &Lifecycle{
+		lc: lifecycle.New(fxlog.DefaultLogger(w), fxclock.System),
 		t:  t,
 	}
+	for _, opt := range opts {
+		opt.apply(lc)
+	}
+	return lc
+}
+
+func (l *Lifecycle) withTimeout(ctx context.Context, fn func(context.Context) error) error {
+	if !l.enforceTimeout {
+		return fn(ctx)
+	}
+
+	// Cancel on timeout in case function only respects
+	// cancellation and not deadline exceeded.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	c := make(chan error, 1) // buffered to avoid goroutine leak
+	go func() {
+		c <- fn(ctx)
+	}()
+
+	var err error
+	select {
+	case err = <-c:
+	case <-ctx.Done():
+		err = ctx.Err()
+	}
+	return err
 }
 
 // Start executes all registered OnStart hooks in order, halting at the first
 // hook that doesn't succeed.
-func (l *Lifecycle) Start(ctx context.Context) error { return l.lc.Start(ctx) }
+func (l *Lifecycle) Start(ctx context.Context) error {
+	return l.withTimeout(ctx, l.lc.Start)
+}
 
 // RequireStart calls Start with context.Background(), failing the test if an
 // error is encountered.
@@ -116,7 +171,9 @@ func (l *Lifecycle) RequireStart() *Lifecycle {
 // If any hook returns an error, execution continues for a best-effort
 // cleanup. Any errors encountered are collected into a single error and
 // returned.
-func (l *Lifecycle) Stop(ctx context.Context) error { return l.lc.Stop(ctx) }
+func (l *Lifecycle) Stop(ctx context.Context) error {
+	return l.withTimeout(ctx, l.lc.Stop)
+}
 
 // RequireStop calls Stop with context.Background(), failing the test if an error
 // is encountered.

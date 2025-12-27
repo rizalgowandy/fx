@@ -1,8 +1,12 @@
 module go.uber.org/fx/tools
 
-go 1.16
+go 1.22.0
+
+toolchain go1.24.0
+
+require golang.org/x/tools v0.30.0
 
 require (
-	golang.org/x/lint v0.0.0-20190930215403-16217165b5de
-	honnef.co/go/tools v0.2.0
+	golang.org/x/mod v0.23.0 // indirect
+	golang.org/x/sync v0.11.0 // indirect
 )

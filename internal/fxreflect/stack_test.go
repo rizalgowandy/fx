@@ -29,12 +29,16 @@ import (
 )
 
 func TestStack(t *testing.T) {
+	t.Parallel()
+
 	// NOTE:
 	// We don't assert the length of the stack because we cannot make
 	// guarantees about how many frames the test runner is allowed to
 	// introduce.
 
 	t.Run("default", func(t *testing.T) {
+		t.Parallel()
+
 		frames := CallerStack(0, 0)
 		require.NotEmpty(t, frames)
 		f := frames[0]
@@ -43,24 +47,9 @@ func TestStack(t *testing.T) {
 		assert.NotZero(t, f.Line)
 	})
 
-	t.Run("default/deeper", func(t *testing.T) {
-		// Introduce a few frames.
-		frames := func() []Frame {
-			return func() []Frame {
-				return CallerStack(0, 0)
-			}()
-		}()
-
-		require.True(t, len(frames) > 3, "expected at least three frames")
-		for i, name := range []string{"func2.1.1", "func2.1", "func2"} {
-			f := frames[i]
-			assert.Equal(t, "go.uber.org/fx/internal/fxreflect.TestStack."+name, f.Function)
-			assert.Contains(t, f.File, "internal/fxreflect/stack_test.go")
-			assert.NotZero(t, f.Line)
-		}
-	})
-
 	t.Run("skip", func(t *testing.T) {
+		t.Parallel()
+
 		// Introduce a few frames and skip 2.
 		frames := func() []Frame {
 			return func() []Frame {
@@ -70,13 +59,34 @@ func TestStack(t *testing.T) {
 
 		require.NotEmpty(t, frames)
 		f := frames[0]
-		assert.Equal(t, "go.uber.org/fx/internal/fxreflect.TestStack.func3", f.Function)
+		assert.Equal(t, "go.uber.org/fx/internal/fxreflect.TestStack.func2", f.Function)
 		assert.Contains(t, f.File, "internal/fxreflect/stack_test.go")
 		assert.NotZero(t, f.Line)
 	})
 }
 
+func TestDeepStack(t *testing.T) {
+	t.Run("nest", func(t *testing.T) {
+		// Introduce a few frames.
+		frames := func() []Frame {
+			return func() []Frame {
+				return CallerStack(0, 0)
+			}()
+		}()
+
+		require.True(t, len(frames) > 3, "expected at least three frames")
+		for i, name := range []string{"func1.TestDeepStack.func1.1.2", "func1.1", "func1"} {
+			f := frames[i]
+			assert.Equal(t, "go.uber.org/fx/internal/fxreflect.TestDeepStack."+name, f.Function)
+			assert.Contains(t, f.File, "internal/fxreflect/stack_test.go")
+			assert.NotZero(t, f.Line)
+		}
+	})
+}
+
 func TestStackCallerName(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		desc string
 		give Stack
@@ -149,12 +159,16 @@ func TestStackCallerName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
+			t.Parallel()
+
 			assert.Equal(t, tt.want, tt.give.CallerName())
 		})
 	}
 }
 
 func TestFrameString(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		desc string
 		give Frame
@@ -199,12 +213,16 @@ func TestFrameString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
+			t.Parallel()
+
 			assert.Equal(t, tt.want, tt.give.String())
 		})
 	}
 }
 
 func TestStackFormat(t *testing.T) {
+	t.Parallel()
+
 	stack := Stack{
 		{
 			Function: "path/to/module.SomeFunction()",
@@ -219,6 +237,8 @@ func TestStackFormat(t *testing.T) {
 	}
 
 	t.Run("single line", func(t *testing.T) {
+		t.Parallel()
+
 		assert.Equal(t,
 			"path/to/module.SomeFunction() (path/to/file.go:42); "+
 				"path/to/another/module.AnotherFunction() (path/to/another/file.go:12)",
@@ -226,6 +246,8 @@ func TestStackFormat(t *testing.T) {
 	})
 
 	t.Run("multi line", func(t *testing.T) {
+		t.Parallel()
+
 		assert.Equal(t, `path/to/module.SomeFunction()
 	path/to/file.go:42
 path/to/another/module.AnotherFunction()
@@ -233,4 +255,15 @@ path/to/another/module.AnotherFunction()
 `, fmt.Sprintf("%+v", stack))
 	})
 
+	t.Run("strings", func(t *testing.T) {
+		t.Parallel()
+
+		assert.Equal(t,
+			[]string{
+				"path/to/module.SomeFunction() (path/to/file.go:42)",
+				"path/to/another/module.AnotherFunction() (path/to/another/file.go:12)",
+			},
+			stack.Strings(),
+		)
+	})
 }

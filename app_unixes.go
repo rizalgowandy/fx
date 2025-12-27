@@ -18,11 +18,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:build aix || darwin || dragonfly || freebsd || linux || netbsd || openbsd || solaris
 // +build aix darwin dragonfly freebsd linux netbsd openbsd solaris
 
 package fx
 
 import "golang.org/x/sys/unix"
 
-const _sigINT = unix.SIGINT
-const _sigTERM = unix.SIGTERM
+const (
+	_sigINT  = unix.SIGINT
+	_sigTERM = unix.SIGTERM
+)

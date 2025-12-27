@@ -22,6 +22,7 @@ package fxevent
 
 import (
 	"os"
+	"time"
 )
 
 // Event defines an event emitted by fx.
@@ -30,78 +31,270 @@ type Event interface {
 }
 
 // Passing events by type to make Event hashable in the future.
-func (*LifecycleHookStart) event() {}
-func (*LifecycleHookStop) event()  {}
-func (*ProvideError) event()       {}
-func (*Supply) event()             {}
-func (*Provide) event()            {}
-func (*Invoke) event()             {}
-func (*InvokeError) event()        {}
-func (*StartError) event()         {}
-func (*StopSignal) event()         {}
-func (*StopError) event()          {}
-func (*Rollback) event()           {}
-func (*RollbackError) event()      {}
-func (*Running) event()            {}
+func (*OnStartExecuting) event()  {}
+func (*OnStartExecuted) event()   {}
+func (*OnStopExecuting) event()   {}
+func (*OnStopExecuted) event()    {}
+func (*Supplied) event()          {}
+func (*Provided) event()          {}
+func (*Replaced) event()          {}
+func (*Decorated) event()         {}
+func (*BeforeRun) event()         {}
+func (*Run) event()               {}
+func (*Invoking) event()          {}
+func (*Invoked) event()           {}
+func (*Stopping) event()          {}
+func (*Stopped) event()           {}
+func (*RollingBack) event()       {}
+func (*RolledBack) event()        {}
+func (*Started) event()           {}
+func (*LoggerInitialized) event() {}
 
-// LifecycleHookStart is emitted whenever an OnStart hook is executed
-type LifecycleHookStart struct {
+// OnStartExecuting is emitted before an OnStart hook is executed.
+type OnStartExecuting struct {
+	// FunctionName is the name of the function that will be executed.
+	FunctionName string
+
+	// CallerName is the name of the function that scheduled the hook for
+	// execution.
 	CallerName string
 }
 
-// LifecycleHookStop is emitted whenever an OnStart hook is executed
-type LifecycleHookStop struct {
-	CallerName string
-}
+// OnStartExecuted is emitted after an OnStart hook has been executed.
+type OnStartExecuted struct {
+	// FunctionName is the name of the function that was executed.
+	FunctionName string
 
-// ProvideError is emitted whenever there is an error applying options.
-type ProvideError struct {
+	// CallerName is the name of the function that scheduled the hook for
+	// execution.
+	CallerName string
+
+	// Method specifies the kind of the hook. This is one of "OnStart" and
+	// "OnStop".
+	Method string
+
+	// Runtime specifies how long it took to run this hook.
+	Runtime time.Duration
+
+	// Err is non-nil if the hook failed to execute.
 	Err error
 }
 
-// Supply is emitted whenever a Provide was called with a constructor provided
-// by fx.Supply.
-type Supply struct {
-	TypeName string
+// OnStopExecuting is emitted before an OnStop hook is executed.
+type OnStopExecuting struct {
+	// FunctionName is the name of the function that will be executed.
+	FunctionName string
+
+	// CallerName is the name of the function that scheduled the hook for
+	// execution.
+	CallerName string
 }
 
-// Provide is emitted when we add a constructor to the container.
-type Provide struct {
-	Constructor interface{}
+// OnStopExecuted is emitted after an OnStop hook has been executed.
+type OnStopExecuted struct {
+	// FunctionName is the name of the function that was executed.
+	FunctionName string
+
+	// CallerName is the name of the function that scheduled the hook for
+	// execution.
+	CallerName string
+
+	// Runtime specifies how long it took to run this hook.
+	Runtime time.Duration
+
+	// Err is non-nil if the hook failed to execute.
+	Err error
+}
+
+// Supplied is emitted after a value is added with fx.Supply.
+type Supplied struct {
+	// TypeName is the name of the type of value that was added.
+	TypeName string
+
+	// StackTrace is the stack trace of the call to Supply.
+	StackTrace []string
+
+	// ModuleTrace contains the module locations through which this value was added.
+	ModuleTrace []string
+
+	// ModuleName is the name of the module in which the value was added to.
+	ModuleName string
+
+	// Err is non-nil if we failed to supply the value.
+	Err error
+}
+
+// Provided is emitted when a constructor is provided to Fx.
+type Provided struct {
+	// ConstructorName is the name of the constructor that was provided to
+	// Fx.
+	ConstructorName string
+
+	// StackTrace is the stack trace of where the constructor was provided to Fx.
+	StackTrace []string
+
+	// ModuleTrace contains the module locations through which this was provided to Fx.
+	ModuleTrace []string
 
 	// OutputTypeNames is a list of names of types that are produced by
 	// this constructor.
 	OutputTypeNames []string
+
+	// ModuleName is the name of the module in which the constructor was
+	// provided to.
+	ModuleName string
+
+	// Err is non-nil if we failed to provide this constructor.
+	Err error
+
+	// Private denotes whether the provided constructor is a [Private] constructor.
+	Private bool
 }
 
-// Invoke is emitted whenever a function is invoked.
-type Invoke struct {
-	Function interface{}
+// Replaced is emitted when a value replaces a type in Fx.
+type Replaced struct {
+	// OutputTypeNames is a list of names of types that were replaced.
+	OutputTypeNames []string
+
+	// StackTrace is the stack trace of the call to Replace.
+	StackTrace []string
+
+	// ModuleTrace contains the module locations through which this value was added.
+	ModuleTrace []string
+
+	// ModuleName is the name of the module in which the value was added to.
+	ModuleName string
+
+	// Err is non-nil if we failed to supply the value.
+	Err error
 }
 
-// InvokeError is emitted when fx.Invoke has failed.
-type InvokeError struct {
-	Function   interface{}
-	Err        error
-	Stacktrace string
+// Decorated is emitted when a decorator is executed in Fx.
+type Decorated struct {
+	// DecoratorName is the name of the decorator function that was
+	// provided to Fx.
+	DecoratorName string
+
+	// StackTrace is the stack trace of where the decorator was given to Fx.
+	StackTrace []string
+
+	// ModuleTrace contains the module locations through which this value was added.
+	ModuleTrace []string
+
+	// ModuleName is the name of the module in which the value was added to.
+	ModuleName string
+
+	// OutputTypeNames is a list of names of types that are decorated by
+	// this decorator.
+	OutputTypeNames []string
+
+	// Err is non-nil if we failed to run this decorator.
+	Err error
 }
 
-// StartError is emitted right before exiting after failing to start.
-type StartError struct{ Err error }
+// BeforeRun is emitted before a constructor, decorator, or supply/replace stub is run by Fx.
+// When complete, a Run will be emitted.
+type BeforeRun struct {
+	// Name is the name of the function that will be run.
+	Name string
 
-// StopSignal is emitted whenever application receives a signal after
-// starting the application.
-type StopSignal struct{ Signal os.Signal }
+	// Kind indicates which Fx option was used to pass along the function.
+	// It is either "provide", "decorate", "supply", or "replace".
+	Kind string
 
-// StopError is emitted whenever we fail to stop cleanly.
-type StopError struct{ Err error }
+	// ModuleName is the name of the module in which the function belongs.
+	ModuleName string
+}
 
-// Rollback is emitted whenever a service fails to start.
-type Rollback struct{ StartErr error }
+// Run is emitted after a constructor, decorator, or supply/replace stub is run by Fx.
+type Run struct {
+	// Name is the name of the function that was run.
+	Name string
 
-// RollbackError is emitted whenever we fail to rollback cleanly after
-// a start error.
-type RollbackError struct{ Err error }
+	// Kind indicates which Fx option was used to pass along the function.
+	// It is either "provide", "decorate", "supply", or "replace".
+	Kind string
 
-// Running is emitted whenever an application is started successfully.
-type Running struct{}
+	// ModuleName is the name of the module in which the function belongs.
+	ModuleName string
+
+	// Runtime specifies how long it took to run this function.
+	Runtime time.Duration
+
+	// Err is non-nil if the function returned an error.
+	// If fx.RecoverFromPanics is used, this will include panics.
+	Err error
+}
+
+// Invoking is emitted before we invoke a function specified with fx.Invoke.
+type Invoking struct {
+	// FunctionName is the name of the function that will be invoked.
+	FunctionName string
+
+	// ModuleName is the name of the module in which the value was added to.
+	ModuleName string
+}
+
+// Invoked is emitted after we invoke a function specified with fx.Invoke,
+// whether it succeeded or failed.
+type Invoked struct {
+	// Functionname is the name of the function that was invoked.
+	FunctionName string
+
+	// ModuleName is the name of the module in which the value was added to.
+	ModuleName string
+
+	// Err is non-nil if the function failed to execute.
+	Err error
+
+	// Trace records information about where the fx.Invoke call was made.
+	// Note that this is NOT a stack trace of the error itself.
+	Trace string
+}
+
+// Started is emitted when an application is started successfully and/or it
+// errored.
+type Started struct {
+	// Err is non-nil if the application failed to start successfully.
+	Err error
+}
+
+// Stopping is emitted when the application receives a signal to shut down
+// after starting. This may happen with fx.Shutdowner or by sending a signal to
+// the application on the command line.
+type Stopping struct {
+	// Signal is the signal that caused this shutdown.
+	Signal os.Signal
+}
+
+// Stopped is emitted when the application has finished shutting down, whether
+// successfully or not.
+type Stopped struct {
+	// Err is non-nil if errors were encountered during shutdown.
+	Err error
+}
+
+// RollingBack is emitted when the application failed to start up due to an
+// error, and is being rolled back.
+type RollingBack struct {
+	// StartErr is the error that caused this rollback.
+	StartErr error
+}
+
+// RolledBack is emitted after a service has been rolled back, whether it
+// succeeded or not.
+type RolledBack struct {
+	// Err is non-nil if the rollback failed.
+	Err error
+}
+
+// LoggerInitialized is emitted when a logger supplied with fx.WithLogger is
+// instantiated, or if it fails to instantiate.
+type LoggerInitialized struct {
+	// ConstructorName is the name of the constructor that builds this
+	// logger.
+	ConstructorName string
+
+	// Err is non-nil if the logger failed to build.
+	Err error
+}

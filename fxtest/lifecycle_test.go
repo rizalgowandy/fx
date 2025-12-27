@@ -26,6 +26,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -34,7 +35,11 @@ import (
 )
 
 func TestLifecycle(t *testing.T) {
+	t.Parallel()
+
 	t.Run("Success", func(t *testing.T) {
+		t.Parallel()
+
 		spy := newTB()
 
 		n := 0
@@ -50,6 +55,8 @@ func TestLifecycle(t *testing.T) {
 	})
 
 	t.Run("StartError", func(t *testing.T) {
+		t.Parallel()
+
 		spy := newTB()
 		lc := NewLifecycle(spy)
 		lc.Append(fx.Hook{OnStart: func(context.Context) error { return errors.New("fail") }})
@@ -62,6 +69,8 @@ func TestLifecycle(t *testing.T) {
 	})
 
 	t.Run("StopFailure", func(t *testing.T) {
+		t.Parallel()
+
 		spy := newTB()
 		lc := NewLifecycle(spy)
 		lc.Append(fx.Hook{OnStop: func(context.Context) error { return errors.New("fail") }})
@@ -74,6 +83,8 @@ func TestLifecycle(t *testing.T) {
 	})
 
 	t.Run("RequireLeakDetection", func(t *testing.T) {
+		t.Parallel()
+
 		spy := newTB()
 		lc := NewLifecycle(spy)
 
@@ -107,8 +118,108 @@ func TestLifecycle(t *testing.T) {
 	})
 }
 
+func TestEnforceTimeout(t *testing.T) {
+	// These tests directly call Start and Stop
+	// rather than RequireStart and RequireStop
+	// because EnforceTimeout does not apply to those.
+
+	t.Run("StartHookTimeout", func(t *testing.T) {
+		t.Parallel()
+
+		wait := make(chan struct{})
+		defer close(wait) // force timeout by blocking OnStart until end of test
+
+		spy := newTB()
+		lc := NewLifecycle(spy, EnforceTimeout(true))
+		lc.Append(fx.Hook{
+			OnStart: func(context.Context) error {
+				<-wait
+				return nil
+			},
+		})
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+		defer cancel()
+		assert.ErrorIs(t, lc.Start(ctx), context.DeadlineExceeded)
+		assert.Zero(t, spy.failures)
+	})
+
+	t.Run("StopHookTimeout", func(t *testing.T) {
+		t.Parallel()
+
+		wait := make(chan struct{})
+		defer close(wait) // force timeout by blocking OnStop until end of test
+
+		spy := newTB()
+		lc := NewLifecycle(spy, EnforceTimeout(true))
+		lc.Append(fx.Hook{
+			OnStop: func(context.Context) error {
+				<-wait
+				return nil
+			},
+		})
+
+		require.NoError(t, lc.Start(context.Background()))
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+		defer cancel()
+		assert.ErrorIs(t, lc.Stop(ctx), context.DeadlineExceeded)
+		assert.Zero(t, spy.failures)
+	})
+
+	t.Run("NoTimeout", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			started bool
+			stopped bool
+		)
+
+		spy := newTB()
+		lc := NewLifecycle(spy, EnforceTimeout(true))
+		lc.Append(fx.Hook{
+			OnStart: func(context.Context) error {
+				started = true
+				return nil
+			},
+			OnStop: func(context.Context) error {
+				stopped = true
+				return nil
+			},
+		})
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
+		defer cancel()
+		require.NoError(t, lc.Start(ctx))
+		require.NoError(t, lc.Stop(ctx))
+		assert.True(t, started)
+		assert.True(t, stopped)
+		assert.Zero(t, spy.failures)
+	})
+
+	t.Run("OtherError", func(t *testing.T) {
+		t.Parallel()
+
+		spy := newTB()
+		lc := NewLifecycle(spy, EnforceTimeout(true))
+		lc.Append(fx.Hook{
+			OnStart: func(context.Context) error {
+				return errors.New("NOT a context-related error")
+			},
+		})
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
+		defer cancel()
+		assert.ErrorContains(t, lc.Start(ctx), "NOT a context-related error")
+		assert.Zero(t, spy.failures)
+	})
+}
+
 func TestLifecycle_OptionalT(t *testing.T) {
+	t.Parallel()
+
 	t.Run("success", func(t *testing.T) {
+		t.Parallel()
+
 		lc := NewLifecycle(nil)
 
 		var started, stopped bool
@@ -134,6 +245,8 @@ func TestLifecycle_OptionalT(t *testing.T) {
 	})
 
 	t.Run("start error", func(t *testing.T) {
+		t.Parallel()
+
 		lc := NewLifecycle(nil)
 		lc.Append(fx.Hook{
 			OnStart: func(context.Context) error {
@@ -141,7 +254,7 @@ func TestLifecycle_OptionalT(t *testing.T) {
 			},
 		})
 
-		var pval interface{}
+		var pval any
 		func() {
 			defer func() { pval = recover() }()
 			lc.RequireStart()
@@ -152,7 +265,11 @@ func TestLifecycle_OptionalT(t *testing.T) {
 }
 
 func TestPanicT(t *testing.T) {
+	t.Parallel()
+
 	t.Run("Logf", func(t *testing.T) {
+		t.Parallel()
+
 		var buff bytes.Buffer
 		pt := panicT{W: &buff}
 		pt.Logf("hello: %v", "world")
@@ -161,6 +278,8 @@ func TestPanicT(t *testing.T) {
 	})
 
 	t.Run("Errorf", func(t *testing.T) {
+		t.Parallel()
+
 		var buff bytes.Buffer
 		pt := panicT{W: &buff}
 		pt.Errorf("hello: %v", "world")
@@ -170,7 +289,9 @@ func TestPanicT(t *testing.T) {
 		// Functionally there's no difference between Logf and Errorf
 		// unless FailNow is called.
 		t.Run("FailNow", func(t *testing.T) {
-			var pval interface{}
+			t.Parallel()
+
+			var pval any
 			func() {
 				defer func() { pval = recover() }()
 				pt.FailNow()
@@ -181,11 +302,13 @@ func TestPanicT(t *testing.T) {
 
 	// FailNow without calling Errorf will use the fixed message.
 	t.Run("FailNow", func(t *testing.T) {
+		t.Parallel()
+
 		var buff bytes.Buffer
 		pt := panicT{W: &buff}
 		pt.Logf("hello: %v", "world")
 
-		var pval interface{}
+		var pval any
 		func() {
 			defer func() { pval = recover() }()
 			pt.FailNow()

@@ -28,15 +28,19 @@ import (
 )
 
 func TestCaller(t *testing.T) {
+	t.Parallel()
+
 	assert.Equal(t, "go.uber.org/fx/internal/fxreflect.TestCaller", Caller())
 }
 
 func someFunc() {}
 
 func TestFuncName(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		desc string
-		give interface{}
+		give any
 		want string
 	}{
 		{
@@ -53,12 +57,16 @@ func TestFuncName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
+			t.Parallel()
+
 			assert.Equal(t, tt.want, FuncName(tt.give))
 		})
 	}
 }
 
 func TestSanitizeFuncNames(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name     string
 		input    string
@@ -82,6 +90,8 @@ func TestSanitizeFuncNames(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+
 			assert.Equal(t, c.expected, sanitize(c.input))
 		})
 	}

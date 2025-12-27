@@ -18,11 +18,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:build windows
 // +build windows
 
 package fx
 
 import "golang.org/x/sys/windows"
 
-const _sigINT = windows.SIGINT
-const _sigTERM = windows.SIGTERM
+const (
+	_sigINT  = windows.SIGINT
+	_sigTERM = windows.SIGTERM
+)

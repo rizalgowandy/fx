@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Uber Technologies, Inc.
+// Copyright (c) 2019-2021 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -37,7 +37,7 @@ type App struct {
 // New creates a new test application.
 func New(tb TB, opts ...fx.Option) *App {
 	allOpts := make([]fx.Option, 0, len(opts)+1)
-	allOpts = append(allOpts, fx.Logger(NewTestPrinter(tb)))
+	allOpts = append(allOpts, WithTestLogger(tb))
 	allOpts = append(allOpts, opts...)
 
 	app := fx.New(allOpts...)
